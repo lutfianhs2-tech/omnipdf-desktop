@@ -1,4 +1,5 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, dialog } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const http = require('http');
 const { exec } = require('child_process');
@@ -6,8 +7,15 @@ const os = require('os');
 
 let mainWindow = null;
 
+// ============================================================================
+// OPSI UPDATE INSTAN (HYBRID CLOUD UI):
+// Jika Anda mengisi URL Cloudflare Pages Anda di bawah ini (misal: 'https://omnipdf-studio.pages.dev'),
+// maka aplikasi .EXE akan otomatis memuat tampilan terbaru dari Cloudflare saat ada internet,
+// dan otomatis kembali ke file lokal (offline) jika sedang tidak ada internet!
+// ============================================================================
+const CLOUDFLARE_LIVE_URL = process.env.OMNIPDF_CLOUD_URL || '';
+
 // Jalankan Local Hardware Bridge otomatis di dalam aplikasi .EXE (Port 17890)
-// Membaca seluruh Printer Wi-Fi/USB (seperti MS Word) dan Scanner Wireless (WSD/WIA/eSCL) dari Windows/Mac!
 function startEmbeddedHardwareBridge() {
   const server = http.createServer(async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -19,9 +27,21 @@ function startEmbeddedHardwareBridge() {
       return res.end();
     }
 
+    // Endpoint Cek Update Aplikasi dari dalam UI
+    if (req.url === '/api/check-update' && req.method === 'GET') {
+      try {
+        autoUpdater.checkForUpdatesAndNotify();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, currentVersion: app.getVersion(), status: 'Memeriksa pembaruan di GitHub Releases...' }));
+      } catch (e) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, currentVersion: app.getVersion(), status: 'Mode lokal aktif' }));
+      }
+      return;
+    }
+
     if (req.url === '/api/hardware' && req.method === 'GET') {
       try {
-        // 1. Ambil 100% daftar Printer USB & Wi-Fi langsung dari OS (sama persis dengan MS Word!)
         let nativePrinters = [];
         if (mainWindow && mainWindow.webContents) {
           const list = await mainWindow.webContents.getPrintersAsync();
@@ -34,7 +54,6 @@ function startEmbeddedHardwareBridge() {
           }));
         }
 
-        // 2. Ambil daftar Scanner Wireless (WSD / eSCL / WIA) yang menyatu di Printer All-in-One maupun Scanner USB
         if (os.platform() === 'win32') {
           const psCmd = `powershell -NoProfile -Command "$sc = Get-PnpDevice -Class Image -Status OK -ErrorAction SilentlyContinue | Select-Object FriendlyName, Status; $sc | ConvertTo-Json -Compress"`;
           exec(psCmd, { timeout: 3500 }, (err, stdout) => {
@@ -50,7 +69,6 @@ function startEmbeddedHardwareBridge() {
                 }));
               } catch (e) {}
             }
-            // Jika printer All-in-One (Epson/Brother/HP/Canon) terdeteksi di Wi-Fi, otomatis daftarkan unit Scanner-nya!
             nativePrinters.forEach((pr) => {
               const lower = pr.name.toLowerCase();
               if (!lower.includes('microsoft') && !lower.includes('pdf') && !lower.includes('onenote') && !lower.includes('fax')) {
@@ -65,7 +83,7 @@ function startEmbeddedHardwareBridge() {
             });
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ ok: true, printers: nativePrinters, scanners }));
+            res.end(JSON.stringify({ ok: true, appVersion: app.getVersion(), printers: nativePrinters, scanners }));
           });
         } else {
           const scanners = nativePrinters.map((pr) => ({
@@ -74,7 +92,7 @@ function startEmbeddedHardwareBridge() {
             status: 'Ready (Terhubung)'
           }));
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: true, printers: nativePrinters, scanners }));
+          res.end(JSON.stringify({ ok: true, appVersion: app.getVersion(), printers: nativePrinters, scanners }));
         }
       } catch (err) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -99,6 +117,30 @@ function startEmbeddedHardwareBridge() {
   server.listen(17890, '127.0.0.1', () => {});
 }
 
+// Konfigurasi Auto-Updater Resmi (OTA via GitHub Releases)
+function setupAutoUpdater() {
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('update-downloaded', (info) => {
+    dialog.showMessageBox({
+      type: 'info',
+      title: 'Pembaruan OmniPDF Studio Tersedia!',
+      message: `Versi terbaru (v${info.version}) telah selesai diunduh di latar belakang. Apakah Anda ingin me-restart aplikasi sekarang untuk menerapkan update?`,
+      buttons: ['Restart & Update Sekarang', 'Nanti Saja']
+    }).then((result) => {
+      if (result.response === 0) {
+        autoUpdater.quitAndInstall();
+      }
+    });
+  });
+
+  // Cek update otomatis 3 detik setelah aplikasi dibuka
+  setTimeout(() => {
+    autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+  }, 3000);
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -115,6 +157,11 @@ function createWindow() {
 
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
+  } else if (CLOUDFLARE_LIVE_URL) {
+    // Mode Hybrid: Muat UI terbaru dari Cloudflare Pages, jika gagal/offline otomatis pakai file lokal!
+    mainWindow.loadURL(CLOUDFLARE_LIVE_URL).catch(() => {
+      mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    });
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
@@ -123,6 +170,7 @@ function createWindow() {
 app.whenReady().then(() => {
   startEmbeddedHardwareBridge();
   createWindow();
+  setupAutoUpdater();
 });
 
 app.on('window-all-closed', () => {

@@ -254,6 +254,10 @@ export default function App() {
   const [isDiscoveringDevices, setIsDiscoveringDevices] = useState(false);
   const [bridgeConnected, setBridgeConnected] = useState(false);
   const [bridgeHost, setBridgeHost] = useState('http://127.0.0.1:17890');
+  const [githubRepo, setGithubRepo] = useState('lutfianhs2-tech/omnipdf-desktop');
+  const [appVersion, setAppVersion] = useState('2.5.0');
+  const [latestGhVersion, setLatestGhVersion] = useState(null);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState('Belum disinkronkan');
   const [customPrinterIp, setCustomPrinterIp] = useState('');
   const [customPrinterName, setCustomPrinterName] = useState('');
@@ -617,6 +621,36 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // Check Live Updates Directly from https://github.com/lutfianhs2-tech/omnipdf-desktop
+  const handleCheckGithubUpdate = async () => {
+    setIsCheckingUpdate(true);
+    showToast(`Memeriksa pembaruan langsung di GitHub (${githubRepo})...`);
+
+    // 1. Trigger Electron Native Auto-Updater if running inside .EXE
+    try {
+      await fetch(`${bridgeHost}/api/check-update`);
+    } catch (e) {}
+
+    // 2. Also query GitHub API directly for lutfianhs2-tech/omnipdf-desktop package.json version
+    try {
+      const res = await fetch(`https://raw.githubusercontent.com/${githubRepo}/main/package.json?t=${Date.now()}`);
+      if (res.ok) {
+        const pkg = await res.json();
+        setLatestGhVersion(pkg.version || '2.5.0');
+        if (pkg.version && pkg.version !== appVersion) {
+          showToast(`Update baru terdeteksi di GitHub: v${pkg.version}! Sedang mengunduh pembaruan...`);
+        } else {
+          showToast(`Aplikasi Anda sudah versi terbaru (v${pkg.version || appVersion}) sesuai repo ${githubRepo}!`);
+        }
+      } else {
+        showToast(`Terhubung ke GitHub ${githubRepo}. Pastikan branch utama bernama 'main'.`);
+      }
+    } catch (err) {
+      showToast(`Memeriksa rilis terbaru di github.com/${githubRepo}...`);
+    }
+    setIsCheckingUpdate(false);
+  };
+
   const handleRefreshDevices = () => {
     detectRealHardwareDevices(false);
   };
@@ -938,6 +972,15 @@ export default function App() {
             onChange={handleFileUpload}
             className="hidden"
           />
+          <button
+            onClick={handleCheckGithubUpdate}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition"
+            title="Sinkronisasi & Cek Update Langsung dari GitHub lutfianhs2-tech/omnipdf-desktop"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isCheckingUpdate ? 'animate-spin' : ''}`} />
+            <span className="hidden xl:inline">Update GitHub</span>
+          </button>
+
           <button
             onClick={() => {
               setWorkspaceMode('hardware');
