@@ -29,3 +29,41 @@ jobs:
           name: OmniPDF-Studio-Windows-Installer-EXE
           path: |
             release-installer/*.exe
+name: Build & Auto-Update Native Windows EXE
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-exe:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build & Publish Native Windows .EXE (With Auto-Updater Metadata)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run dist:win-local
+
+      - name: Upload Installer .EXE & Auto-Updater Files (latest.yml)
+        uses: actions/upload-artifact@v4
+        with:
+          name: OmniPDF-Studio-Windows-Installer-EXE
+          path: |
+            release-installer/*.exe
+            release-installer/latest.yml
