@@ -2,14 +2,16 @@
   "name": "omnipdf-studio-desktop",
   "private": true,
   "version": "2.5.0",
+  "type": "module",
+  "author": "OmniPDF Studio",
   "description": "OmniPDF Studio Desktop - Native PDF Reader, Converter & Wireless Printer/Scanner App",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "dist:win": "vite build && electron-builder --win nsis portable",
-    "dist:mac": "vite build && electron-builder --mac dmg",
-    "dist:linux": "vite build && electron-builder --linux AppImage"
+    "dist:win": "vite build && electron-builder --win nsis portable --publish never",
+    "dist:mac": "vite build && electron-builder --mac dmg --publish never",
+    "dist:linux": "vite build && electron-builder --linux AppImage --publish never"
   },
   "dependencies": {
     "lucide-react": "^0.454.0",
@@ -39,7 +41,8 @@
       "target": [
         "nsis",
         "portable"
-      ]
+      ],
+      "signAndEditExecutable": false
     }
   }
 }
