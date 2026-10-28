@@ -1,34 +1,3 @@
-name: Build Native Windows EXE & Desktop Installer
-
-on:
-  push:
-    branches: [ "main", "master" ]
-  workflow_dispatch:
-
-jobs:
-  build-windows-exe:
-    runs-on: windows-latest
-    steps:
-      - name: Checkout Source Code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install Dependencies
-        run: npm install
-
-      - name: Build Native Windows .EXE Installer (With Auto Wi-Fi Printer & Scanner Bridge)
-        run: npm run dist:win
-
-      - name: Upload Installer .EXE Siap Download
-        uses: actions/upload-artifact@v4
-        with:
-          name: OmniPDF-Studio-Windows-Installer-EXE
-          path: |
-            release-installer/*.exe
 name: Build & Auto-Update Native Windows EXE
 
 on:
